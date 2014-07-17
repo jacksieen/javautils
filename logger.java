@@ -32,9 +32,14 @@ public class logger{
         else if (ss[0].equals("[CS]")){
 
         }
+        
+
+
     }
 
 }
+
+
 
 class logentry{
     public String tag;
@@ -43,6 +48,7 @@ class logentry{
     public String host;
     public String facility;
     public String content;
+    SimpleDateFormat outDf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss zzz");
 
     logentry(String[] logs){       //constructor
         SimpleDateFormat sdf = new SimpleDateFormat("MMM  dd HH:mm:ss");
@@ -58,14 +64,13 @@ class logentry{
         
     }
 }
-
-
 class JP extends logentry{
     public String module;
     public String user;
     public String fromHost;
-    public String[] cmds;
+    public String cmd;
     String mailContent;
+    boolean loginFlag = false;
     JP(String[] logs){
         super(logs);
         String reg = "%\\S+:";
@@ -81,9 +86,11 @@ class JP extends logentry{
     }
 
     void parse(){
-        if (module.contains("AUTH-5") && content.contains("attempt")){
-            Pattern pat = Pattern.compile("user \\w+");
-            Matcher mat = pat.matcher(content);
+        Pattern pat;
+        Matcher mat;
+        if (module.contains("AUTH-5:") && content.contains("attempt")){
+            pat = Pattern.compile("user \\w+");
+            mat = pat.matcher(content);
             if (mat.find()){
                 user = mat.group().replace("user ","");
             }
@@ -92,7 +99,31 @@ class JP extends logentry{
             if (mat.find()){
                 fromHost = mat.group().replace("host ","");
             }
-            mailContent = String.format("User %s attempt to login %s from %s, at %s", user, host, fromHost, receiveTime);
+            mailContent = String.format("User %s attempt to login %s from %s, at %s", user, host, fromHost, outDf.format(receiveTime));
+        }
+        else if (module.contains("AUTH-5") && content.contains("LOGIN FAILURE"))
+            mailContent = String.format("%s at %s", content, outDf.format(receiveTime));
+        else if (module.contains("UI_LOGIN_EVENT")){
+            pat = Pattern.compile("User '\\w+' login");
+            mat = pat.matcher(content);
+            if (mat.find()){
+                loginFlag = true;
+            }
+        }
+        else if (module.contains("UI_CMDLINE_READ_LINE_")){
+            pat = Pattern.compile("User '\\w+");
+            mat = pat.matcher(content);
+            if (mat.find())
+                user = mat.group().replace("User '", "");
+            pat = Pattern.compile("command '\\w+");
+            mat = pat.matcher(content);
+            if (mat.find()){
+                cmd = mat.group().replace("command '", "");
+            }
+            mailContent = String.format("%s issued command %s", user, cmd);
+        }
+        if (mailContent != null){
+            System.out.println(module+content);
             System.out.println(mailContent);
         }
     }
