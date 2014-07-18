@@ -25,21 +25,19 @@ public class logger{
         String[] ss = pat.split(log);
         if (ss[0].equals("[JP]")){
             JP j = new JP(ss);
+            if (j.mailContent != null)
+                System.out.println(j.mailContent);
         }
         else if (ss[0].equals("[H3C]")){
-
+            H3C h = new H3C(ss);
+            if (h.mailContent != null)
+                System.out.println(h.mailContent);
         }
         else if (ss[0].equals("[CS]")){
 
         }
-        
-
-
     }
-
 }
-
-
 
 class logentry{
     public String tag;
@@ -48,6 +46,7 @@ class logentry{
     public String host;
     public String facility;
     public String content;
+    public String mailContent;
     SimpleDateFormat outDf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss zzz");
 
     logentry(String[] logs){       //constructor
@@ -64,12 +63,12 @@ class logentry{
         
     }
 }
+
 class JP extends logentry{
     public String module;
     public String user;
     public String fromHost;
     public String cmd;
-    String mailContent;
     boolean loginFlag = false;
     JP(String[] logs){
         super(logs);
@@ -120,15 +119,57 @@ class JP extends logentry{
             if (mat.find()){
                 cmd = mat.group().replace("command '", "");
             }
-            mailContent = String.format("%s issued command %s", user, cmd);
-        }
-        if (mailContent != null){
-            System.out.println(module+content);
-            System.out.println(mailContent);
+            mailContent = String.format("User %s issued command %s at %s", user, cmd, host);
         }
     }
 }
 
-/* class H3C extends logentry{ */
-    /*  */
-/* } */
+class H3C extends logentry{
+    public String user;
+    public String fromHost;
+    public String cmd;
+    
+    H3C(String[] logs){
+        super(logs);
+        if (facility.contains("SHELL/"))
+            parse();
+    }
+    void parse(){
+        Pattern pat;
+        Matcher mat;
+        if (facility.contains("SHELL_LOGINFAIL")){
+            pat = Pattern.compile("TELNET .+");
+            mat = pat.matcher(content);
+            if (mat.find()){
+                mailContent = mat.group().replace("TELNET ","")+"\b at "+outDf.format(receiveTime);
+                String tmp = String.format(" login %s ", host);
+                mailContent = mailContent.replace(" log in ", tmp);
+            }
+        }
+
+        else if (facility.contains("SHELL_LOGIN(")){
+            /* System.out.println("parsing "+facility+" "+content); */
+            pat = Pattern.compile("\\w+ logged in");
+            mat = pat.matcher(content);
+            if (mat.find())
+                user = mat.group().replace(" logged in", "");
+            pat = Pattern.compile("from \\S+");
+            mat = pat.matcher(content);
+            if (mat.find())
+                fromHost = mat.group().replace("from ", "");
+            mailContent = String.format("User %s attempt to login %s from %s, at %s", user, host, fromHost, outDf.format(receiveTime));
+        }
+
+        else if (facility.contains("SHELL_CMD")||facility.contains("SHELL_SECLOG")){
+            pat = Pattern.compile("Command is \\S+");
+            mat = pat.matcher(content);
+            if (mat.find())
+                cmd = mat.group().replace("Command is ","");
+            pat = Pattern.compile("-User=.+;");
+            mat = pat.matcher(content);
+            if (mat.find())
+                user = mat.group().replace("-User=","").replace(";","");
+            mailContent = String.format("User %s issued command %s at %s", user, cmd, host);
+        }
+    }
+}
